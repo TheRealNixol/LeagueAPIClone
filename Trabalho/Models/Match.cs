@@ -24,6 +24,6 @@ namespace Trabalho.Models
         public string Time { get; set; }
 
         [Required]
-        public MatchTeam Winner { get; set; }
+        public string Winner { get; set; }
     }
 }

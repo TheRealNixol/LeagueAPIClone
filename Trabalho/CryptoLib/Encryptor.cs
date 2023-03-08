@@ -12,25 +12,26 @@ namespace Trabalho.CryptoLib
 {
     public static class Encryptor
     {
+        //chave que deve ser usada na encryptação e decryptação do Hash
+        static string key { get; set; } = "A!9HHhi%XjjYY4YP2@Nob009X";
         public static string MD5Hash(string text)
         {
-            MD5 md5 = new MD5CryptoServiceProvider();
-
-            //compute hash from the bytes of text  
-            md5.ComputeHash(ASCIIEncoding.ASCII.GetBytes(text));
-
-            //get hash result after compute it  
-            byte[] result = md5.Hash;
-
-            StringBuilder strBuilder = new StringBuilder();
-            for (int i = 0; i < result.Length; i++)
+            using (var md5 = new MD5CryptoServiceProvider())
             {
-                //change it into 2 hexadecimal digits  
-                //for each byte  
-                strBuilder.Append(result[i].ToString("x2"));
-            }
+                using (var tdes = new TripleDESCryptoServiceProvider())
+                {
+                    tdes.Key = md5.ComputeHash(UTF8Encoding.UTF8.GetBytes(key));
+                    tdes.Mode = CipherMode.ECB;
+                    tdes.Padding = PaddingMode.PKCS7;
 
-            return strBuilder.ToString();
+                    using (var transform = tdes.CreateEncryptor())
+                    {
+                        byte[] textBytes = UTF8Encoding.UTF8.GetBytes(text);
+                        byte[] bytes = transform.TransformFinalBlock(textBytes, 0, textBytes.Length);
+                        return Convert.ToBase64String(bytes, 0, bytes.Length);
+                    }
+                }
+            }
         }
     }
 }

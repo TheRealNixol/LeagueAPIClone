@@ -18,10 +18,12 @@ namespace Trabalho.Data
         {    
         }
         public DbSet<User> Users { get; set; }
-        public DbSet<UserQuickStat> UsersQuickStat { get; set; }
+        public DbSet<IngameAccount> IngameAccounts { get; set; }
+        public DbSet<IngameAccountQuickStat> IngameAccountQuickStats { get; set; }
         public DbSet<Match> Matches { get; set; }
         public DbSet<MatchTeam> MatchTeams { get; set; }
         public DbSet<MatchPlayer> MatchPlayers { get; set; }
+        public DbSet<MatchBuild> MatchBuilds { get; set; }
         public DbSet<Champion> Champions { get; set; }
         public DbSet<Item> Items { get; set; }
         public DbSet<ChampionAbilities> ChampionsAbilities { get; set; }

@@ -7,122 +7,155 @@ using Trabalho.Models;
 using Trabalho.Data;
 using Trabalho.CryptoLib;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
+using Trabalho.Services;
 
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
 
 namespace Trabalho
 {
+    
     [ApiController]
     [Route("[controller]")]
-    public class UsersController : Controller
+    //NAO ESQUECER DE PASSAR OS METODOS DE USERCONTROLLER PARA ASYNC
+    public class UsersController : ControllerBase
     {
         
-        private readonly DataContext Db;
+        private readonly DataContext _Db;
+        private IUserService _userService;
 
-        //the framework handles this
-        public UsersController(DataContext _Db)
+        public UsersController(IUserService userService, DataContext Db)
         {
-            this.Db = _Db;
+            _userService = userService;
+            this._Db = Db;
+        }
+
+        //Authentication Request 
+        [AllowAnonymous]
+        [HttpPost("authenticate")]
+        public async Task<IActionResult> Authenticate([FromBody]User userParam)
+        {
+            var user = await _userService.Authenticate(userParam.Name, Encryptor.MD5Hash(userParam.Password));
+
+            if (user == null)
+                return BadRequest(new { message = "Username or Password is incorrect" });
+
+            return Ok(true);
         }
 
         // GET: api/<controller>
         [HttpGet]
-        public List<User> All()
+        public async Task<ActionResult<IEnumerable<User>>> All()
         {
-            using (this.Db)
-            {
-                //Podemos usar metodos LINQ para fazer queries mais especificar até como innerjoins.
-                var Users = Db.Users.FromSqlRaw($"SELECT * FROM users").ToList();
-                return Users;
-            }
-            //Utilizar funções async se restar tempo.. BTW i know that i need to work with tasks for the method to work, the problem consists on the DataContext Declaration itself
-
-            /*using (var context = new DataContext())
-            {
-                return await context.Users.ToListAsync();
-            }*/
+            return await _Db.Users.Include(x=> x.Account)
+                                  .ThenInclude(xx => xx.QuickStat)
+                                  .ThenInclude(xxx => xxx.MainChamp)
+                                  .ThenInclude(xxxx => xxxx.Abilities)
+                                  .Include(y => y.Account)
+                                  .ThenInclude(yy => yy.QuickStat)
+                                  .ThenInclude(yyy => yyy.HighestWinRateChamp)
+                                  .ThenInclude(yyyy => yyyy.Abilities)
+                                  .ToListAsync();
         }
 
         // GET api/<controller>/5
         [HttpGet("{id}")]
-        public List<User> Get(int id)
+        public async Task<ActionResult<User>> Get(int id)
         {
-            using (this.Db)
+            var user = await _Db.Users.Include(x => x.Account)
+                                  .ThenInclude(xx => xx.QuickStat)
+                                  .ThenInclude(xxx => xxx.MainChamp)
+                                  .ThenInclude(xxxx => xxxx.Abilities)
+                                  .Include(y => y.Account)
+                                  .ThenInclude(yy => yy.QuickStat)
+                                  .ThenInclude(yyy => yyy.HighestWinRateChamp)
+                                  .ThenInclude(yyyy => yyyy.Abilities)
+                                  .SingleAsync(_user => _user.Id == id);
+            if (user == null)
             {
-                var User = Db.Users.FromSqlRaw($"SELECT * FROM users").Where(campo => campo.Id == id).ToList();
-                return User;
+                return NotFound();
             }
+
+            return user;
         }
 
         // POST api/<controller>
         [HttpPost]
-        public bool Post([FromBody] User _User)
+        public async Task<ActionResult<User>> Post([FromBody] User _User)
         {
-            //Uma maneira mais orientada a objectos de inserir na DB via DataContext
-            using (this.Db)
-            {
-                User NewUser = new User();
-                // Campos a Inserir
-                NewUser.Name = _User.Name;
-                //Usa classe estática Encryptor para usar o metodo MD5Hash que ira encriptar a string
-                NewUser.Password = Encryptor.MD5Hash(_User.Password);
-                NewUser.Level = _User.Level;
-                NewUser.Email = _User.Email;
-                Db.Users.Add(NewUser);
-                // Executa as modificações na BD. O método esta escrito em baixo e retorna bool dependendo se as modificações foram feitas ou não
-                //return NewUser;
-                return SaveChangesToDatabase();
+            long AccountId = _User.Account.Id;
+            _User.Account = _Db.IngameAccounts.SingleOrDefault(o => o.Id == AccountId);
+            //Hash the password
+            _User.Password = Encryptor.MD5Hash(_User.Password);
 
-            };
-            
+
+            _Db.Users.Add(_User);
+            await _Db.SaveChangesAsync();
+            return CreatedAtAction("Get", new { id = _User.Id }, _User);
+
         }
 
         // PUT api/<controller>/5
         [HttpPut("{id}")]
-        public bool Put(int id, [FromBody]User _User)
+        public async Task<ActionResult<User>> Put(int id, [FromBody]User _User)
         {
-            using (this.Db)
+            if (id != _User.Id)
             {
-                //Fetch o Row do user a modificar
-                User TargetUser = Db.Users.Single(user => user.Id == id);
-                //Declara que o User a modificar fica com as alterações enviadas
-                TargetUser.Id = _User.Id;
-                TargetUser.Name = _User.Name;
-                //Usa classe estática Encryptor para usar o metodo MD5Hash que ira encriptar a string
-                TargetUser.Password = Encryptor.MD5Hash(_User.Password);
-                TargetUser.Level = _User.Level;
-                TargetUser.Email = _User.Email;
-                TargetUser.Token = _User.Token;
-                // Executa as modificações na BD. O método esta escrito em baixo e retorna bool dependendo se as modificações foram feitas ou não
-                return SaveChangesToDatabase();
+                return BadRequest();
             }
+            // Get Account Entity to be able to put into User Update 
+            long AccountId = _User.Account.Id;
+            _User.Account = _Db.IngameAccounts.SingleOrDefault(o => o.Id == AccountId);
+
+            //Get User Entity
+            User UserTarget = _Db.Users.Single(x => x.Id == id);
+
+            UserTarget.Name = _User.Name;
+            UserTarget.Password = _User.Password;
+            UserTarget.Email = _User.Email;
+            UserTarget.Token = _User.Token;
+            //User Account goes Unchanged
+            UserTarget.Account = _User.Account;
+
+            try
+            {
+                await _Db.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!UserExists(id))
+                {
+                    return NotFound();
+                }
+                else
+                {
+                    throw;
+                }
+            }
+            return CreatedAtAction("Get", new { id = _User.Id }, _User);
+
+
         }
 
         // DELETE api/<controller>/5
         [HttpDelete("{id}")]
-        public bool Delete(int id)
+        public async Task<ActionResult<bool>> Delete(int id)
         {
-            using (this.Db)
+            var UserTarget = await _Db.Users.FindAsync(id);
+            if (UserTarget == null)
             {
-                //Fetch o Row do user a apagar
-                User TargetUser = Db.Users.Single(user => user.Id == id);
-                Db.Users.Remove(TargetUser);
-                // Executa as modificações na BD. O método esta escrito em baixo e retorna bool dependendo se as modificações foram feitas ou não
-                return SaveChangesToDatabase();
+                return NotFound();
             }
+
+            _Db.Users.Remove(UserTarget);
+            await _Db.SaveChangesAsync();
+
+            return true;
         }
 
-        private bool SaveChangesToDatabase()
+        private bool UserExists(int id)
         {
-            // Executa as modificações na BD. A value da função passa a 1 se for escrito na BD
-            if (Db.SaveChanges() > 0)
-            {
-                return true;
-            }
-            else
-            {
-                return false;
-            }
+            return _Db.Users.Any(e => e.Id == id);
         }
     }
 }

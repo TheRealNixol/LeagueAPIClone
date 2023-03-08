@@ -12,13 +12,7 @@ namespace Trabalho.Models
         public int Id { get; set; }
 
         [Required]
-        public Match Game { get; set; }
-
-        [Required]
-        public MatchTeam Team { get; set; }
-
-        [Required]
-        public User User { get; set; }
+        public IngameAccount User { get; set; }
 
         [Required]
         public Champion Champion { get; set; }
@@ -27,10 +21,9 @@ namespace Trabalho.Models
         public int Level { get; set; }
 
         [Required]
-        public int Gold { get; set; }
+        public float Gold { get; set; }
 
-        [Required]
-        public Item[] Build { get; set; }
+        public MatchBuild Build { get; set; }
 
         [Required]
         public int Kills { get; set; }
